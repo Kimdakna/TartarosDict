@@ -2,3 +2,6 @@
 /.vs
 /.vs/TartarosDict
 /.vs/TartarosDict/FileContentIndex
+.vs/
+*.suo
+*.user
