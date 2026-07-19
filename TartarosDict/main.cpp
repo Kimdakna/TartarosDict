@@ -386,6 +386,33 @@ bool DownloadFile(const wchar_t* host, const wchar_t* path, const wchar_t* saveP
     return true;
 }
 
+bool ReplaceDictionaryFile()
+{
+    // 기존 백업 삭제
+    DeleteFile(L"unitdict_backup.txt");
+
+
+    // 기존 파일 백업
+    if (!MoveFile(L"unitdict.txt", L"unitdict_backup.txt"))
+    {
+        return false;
+    }
+
+
+    // tmp -> 실제 파일
+    if (!MoveFile(L"unitdict.tmp", L"unitdict.txt"))
+    {
+        // 실패하면 복구
+        MoveFile(
+            L"unitdict_backup.txt",
+            L"unitdict.txt");
+
+        return false;
+    }
+
+    return true;
+}
+
 bool UpdateDictionary()
 {
     const wchar_t* tempFile = L"unitdict.tmp";
@@ -403,70 +430,26 @@ bool UpdateDictionary()
         return false;
     }
 
+    if (!ReplaceDictionaryFile())
+    {
+        DeleteFile(tempFile);
+        return false;
+    }
+
+
     return true;
 }
 
-void CheckUpdate()
+void ClearDictionary()
 {
-    std::wstring localVersion =
-        GetLocalVersion();
-
-
-    std::wstring githubVersion =
-        GetGithubVersion();
-
-
-    // GitHub 접속 실패
-    if (githubVersion.empty())
-    {
-        return;
-    }
-
-
-    // 버전 동일
-    if (localVersion == githubVersion)
-    {
-        MessageBox(
-            NULL,
-            L"사전이 최신 버전입니다.",
-            L"Update",
-            MB_OK);
-
-        return;
-    }
-
-
-    // 버전 다름
-    wchar_t msg[256];
-
-    wsprintf(
-        msg,
-        L"새 버전 발견\n\n현재 : %s\n최신 : %s",
-        localVersion.c_str(),
-        githubVersion.c_str());
-
-
-    if (UpdateDictionary())
-    {
-        MessageBox(
-            NULL,
-            L"다운로드 성공",
-            L"Update",
-            MB_OK);
-    }
-    else
-    {
-        MessageBox(
-            NULL,
-            L"다운로드 실패",
-            L"Update",
-            MB_OK);
-    }
+    g_units.clear();
+    g_searchResult.clear();
 }
-
 
 bool LoadDictionary()
 {
+    ClearDictionary();
+
     std::ifstream file("unitdict.txt", std::ios::binary);
 
     if (!file.is_open())
@@ -505,6 +488,62 @@ bool LoadDictionary()
     }
 
     return true;
+}
+
+void CheckUpdate()
+{
+    std::wstring localVersion =
+        GetLocalVersion();
+
+
+    std::wstring githubVersion =
+        GetGithubVersion();
+
+
+    // GitHub 접속 실패
+    if (githubVersion.empty())
+    {
+        return;
+    }
+
+
+    // 버전 동일
+    if (localVersion == githubVersion)
+    {
+        return;
+    }
+
+
+    // 버전 다름
+    wchar_t msg[256];
+
+    wsprintf(
+        msg,
+        L"새 버전 발견\n\n현재 : %s\n최신 : %s",
+        localVersion.c_str(),
+        githubVersion.c_str());
+
+
+    if (UpdateDictionary())
+    {
+        ClearDictionary();
+
+        LoadDictionary();
+
+        MessageBox(
+            NULL,
+            L"사전 업데이트 완료",
+            L"Update",
+            MB_OK);
+    }
+    else
+    {
+        MessageBox(
+            NULL,
+            L"사전 업데이트 실패",
+            L"Update",
+            MB_OK);
+    }
 }
 
 bool CopyToClipboard(const std::wstring& text)
@@ -755,20 +794,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             g_hInst,
             NULL);
 
-        if (LoadDictionary())
-        {
-            CheckUpdate();
+        CheckUpdate();
 
-            wchar_t buf[128];
-
-            wsprintf(
-                buf,
-                L"%d개 로드 완료",
-                (int)g_units.size());
-
-            MessageBox(hwnd, buf, L"Dictionary", MB_OK);
-        }
-        else
+        if (!LoadDictionary())
         {
             MessageBox(
                 hwnd,
